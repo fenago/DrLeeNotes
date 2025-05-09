@@ -2,7 +2,7 @@
 
 ## Current System Assessment
 
-Based on the thorough code review, the Notes application has solid foundations but could benefit from several improvements in reliability, features, and code quality.
+Based on the thorough code review, the AgenticNotes application has solid foundations but could benefit from several improvements in reliability, features, and code quality.
 
 ## Development Plan Checklist
 
@@ -105,7 +105,7 @@ Based on the thorough code review, the Notes application has solid foundations b
 
 ```mermaid
 gantt
-    title Notes Application Development Timeline
+    title AgenticNotes Application Development Timeline
     dateFormat  YYYY-MM-DD
     section Phase 1: Stability
     Fix Convex Deployment Issues       :done, p1_1, 2025-05-01, 7d

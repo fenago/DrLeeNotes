@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Notes application uses Convex as its database and backend service. The schema defines the structure of the data stored in the application, including tables (collections) and indexes for efficient data retrieval.
+The AgenticNotes application uses Convex as its database and backend service. The schema defines the structure of the data stored in the application, including tables (collections) and indexes for efficient data retrieval.
 
 ## Tables
 

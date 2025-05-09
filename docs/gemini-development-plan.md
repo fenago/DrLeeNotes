@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This document outlines the comprehensive development plan for transforming the existing Notes application into an advanced, Gemini-powered note-taking platform with agentic workflows. The plan includes technical approach, implementation phases, resource requirements, and evaluation metrics.
+This document outlines the comprehensive development plan for transforming the existing AgenticNotes application into an advanced, Gemini-powered note-taking platform with agentic workflows. The plan includes technical approach, implementation phases, resource requirements, and evaluation metrics.
 
 ## 1. Technical Foundations
 
@@ -794,4 +794,4 @@ The project will be considered successful if:
 
 ## Conclusion
 
-This development plan outlines a comprehensive approach to transforming the existing Notes application into a powerful, Gemini-powered note-taking platform with agentic workflows. The phased implementation approach allows for incremental development and testing, while the modular architecture ensures flexibility and scalability. With the right resources and careful execution, this project has the potential to create a truly game-changing tool for students.
+This development plan outlines a comprehensive approach to transforming the existing AgenticNotes application into a powerful, Gemini-powered note-taking platform with agentic workflows. The phased implementation approach allows for incremental development and testing, while the modular architecture ensures flexibility and scalability. With the right resources and careful execution, this project has the potential to create a truly game-changing tool for students.

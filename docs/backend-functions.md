@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Notes application uses Convex for backend functions. These functions are organized into several modules that handle different aspects of the application, including note management, audio processing, and AI integration.
+The AgenticNotes application uses Convex for backend functions. These functions are organized into several modules that handle different aspects of the application, including note management, audio processing, and AI integration.
 
 ## Function Modules
 

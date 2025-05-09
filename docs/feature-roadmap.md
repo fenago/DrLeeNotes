@@ -2,7 +2,7 @@
 
 ## Core Enhancements
 
-This document outlines ambitious new features that can be integrated into the Notes application, with a focus on Gemini API integration and agentic workflows.
+This document outlines ambitious new features that can be integrated into the AgenticNotes application, with a focus on Gemini API integration and agentic workflows.
 
 ## 1. Voice Enhancement Features
 

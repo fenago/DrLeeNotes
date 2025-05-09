@@ -688,7 +688,7 @@ Create a configuration file at `convex/config/whisper-config.json`:
 
 ## Integration into Existing Application
 
-The long recording support will be integrated into the Notes application by:
+The long recording support will be integrated into the AgenticNotes application by:
 
 1. Replacing the current recording component with the chunked recording manager
 2. Adding configuration options for local vs. cloud processing

@@ -1,0 +1,12 @@
+# netlify.toml
+
+[build]
+  command = "npm run build"  # Or yarn build, or pnpm build depending on your project
+  publish = ".next"          # Default publish directory for Next.js projects
+
+[dev]
+  command = "npm run dev"    # Command to run Netlify Dev
+  port = 3000                # Port for Netlify Dev
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs" # Essential Next.js plugin for Netlify

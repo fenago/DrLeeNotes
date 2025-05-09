@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Notes application frontend is built with Next.js, React, and Tailwind CSS. It follows a component-based architecture with a clear separation between pages and reusable UI components.
+The AgenticNotes application frontend is built with Next.js, React, and Tailwind CSS. It follows a component-based architecture with a clear separation between pages and reusable UI components.
 
 ## Page Structure
 

@@ -69,9 +69,9 @@ An agentic note-taking experience might include:
 5. **Follow-up Prompting**: Suggesting areas to research further or clarification needed
 6. **Contextual References**: Adding relevant sources, definitions, or examples
 
-## Integration with Existing Notes Application
+## Integration with Existing AgenticNotes Application
 
-The current Notes application has a solid foundation with:
+The current AgenticNotes application has a solid foundation with:
 
 - Voice note recording capability
 - Transcription using Whisper API

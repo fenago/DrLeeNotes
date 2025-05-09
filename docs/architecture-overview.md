@@ -1,8 +1,8 @@
-# Notes Application Architecture Overview
+# AgenticNotes Architecture Overview
 
 ## System Architecture
 
-The Notes application is built using a modern web stack that combines several powerful technologies to provide a seamless voice note-taking experience. The application follows a client-server architecture with clear separation of concerns:
+The AgenticNotes application is built using a modern web stack that combines several powerful technologies to provide a seamless voice note-taking experience. The application follows a client-server architecture with clear separation of concerns:
 
 ### Frontend
 - **Next.js (v14.0.4)**: React framework using App Router for routing and rendering
