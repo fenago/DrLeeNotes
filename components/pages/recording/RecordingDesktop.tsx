@@ -1,7 +1,6 @@
 import { api } from '@/convex/_generated/api';
 import { Doc } from '@/convex/_generated/dataModel';
-import { formatTimestamp } from '@/lib/utils';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import Link from 'next/link';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
@@ -22,6 +21,7 @@ export default function RecordingDesktop({
     _creationTime,
   } = note;
   const [originalIsOpen, setOriginalIsOpen] = useState<boolean>(true);
+  const llmSettings = useQuery(api.notes.getUserSettings);
 
   const mutateActionItems = useMutation(api.notes.removeActionItem);
 
@@ -43,8 +43,28 @@ export default function RecordingDesktop({
         </h1>
         <div className="flex items-center justify-center">
           <p className="text-lg opacity-80">
-            {formatTimestamp(Number(_creationTime))}
+            {new Date(Number(_creationTime)).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </p>
+          {/* Added Model Information Display Start */}
+          <div className="text-xs opacity-60 mt-1">
+            <p>Transcription: Whisper (via Replicate)</p>
+            {!llmSettings ? (
+              <p>LLM: Loading settings...</p>
+            ) : (
+              <p>
+                LLM: {llmSettings?.llmProvider === 'openai' 
+                  ? `OpenAI (${llmSettings.llmModel || 'gpt-4o'})` 
+                  : 'Together AI'}
+              </p>
+            )}
+          </div>
+          {/* Added Model Information Display End */}
         </div>
       </div>
       <div className="mt-[18px] grid h-fit w-full grid-cols-2 px-[30px] py-[19px] lg:px-[45px]">

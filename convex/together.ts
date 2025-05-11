@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import {
+  action,
   internalAction,
   internalMutation,
   internalQuery,
@@ -33,21 +34,29 @@ const NoteSchema = z.object({
     ),
 });
 
-export const chat = internalAction({
+// Renamed from 'chat' to 'extractWithTogether'
+// This action now only extracts data and returns it, does not save.
+export const extractWithTogether = internalAction({
   args: {
-    id: v.id('notes'),
+    id: v.optional(v.id('notes')), // id is not strictly needed for extraction if we just pass transcript
     transcript: v.string(),
+    model: v.optional(v.string()), // Added model parameter
   },
   handler: async (ctx, args) => {
     const { transcript } = args;
-    console.log(`[DEBUG] Together chat started for note ${args.id} with transcript length: ${transcript.length}`);
+    const noteId = args.id || 'unknown'; // For logging purposes if id is passed
+    const selectedModel = args.model || 'mistralai/Mixtral-8x7B-Instruct-v0.1'; // Updated default, and uses args.model
+
+    console.log(`[TOGETHER_EXTRACT] Extraction started for note ${noteId} with transcript length: ${transcript.length} using model ${selectedModel}`);
+
+    if (!togetherApiKey || togetherApiKey === 'undefined') {
+      console.error('[TOGETHER_EXTRACT] TOGETHER_API_KEY is not set or is invalid.');
+      throw new Error('Together API key is not configured.');
+    }
 
     try {
-      console.log(`[DEBUG] Making Together API call for note ${args.id} using model: meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo`);
-      console.log(`[DEBUG] Together API Key present: ${!!togetherApiKey}`);
-      console.log(`[DEBUG] API Key starts with: ${togetherApiKey.substring(0, 5)}...`);
+      console.log(`[TOGETHER_EXTRACT] Making Together API call for note ${noteId} using model: ${selectedModel}`);
       
-      // Using direct API call with the Llama model and manual JSON parsing
       const response = await togetherai.chat.completions.create({
         messages: [
           {
@@ -56,14 +65,13 @@ export const chat = internalAction({
           },
           { role: 'user', content: transcript },
         ],
-        model: 'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+        model: selectedModel,
         max_tokens: 1000,
         temperature: 0.6
       });
       
-      // Parse the JSON response manually
       const responseContent = response.choices[0]?.message?.content?.trim() || '';
-      console.log(`[DEBUG] Raw response: ${responseContent.substring(0, Math.min(100, responseContent.length))}...`);
+      console.log(`[TOGETHER_EXTRACT] Raw response: ${responseContent.substring(0, Math.min(100, responseContent.length))}...`);
       
       interface ExtractedData {
         title?: string;
@@ -75,41 +83,38 @@ export const chat = internalAction({
       try {
         jsonData = JSON.parse(responseContent) as ExtractedData;
       } catch (parseError) {
-        console.error(`[ERROR] JSON parsing failed: ${parseError}`);
-        // Try to extract JSON portion from response (in case model adds any text)
+        console.error(`[TOGETHER_EXTRACT] JSON parsing failed: ${parseError}`);
         const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('Could not find JSON in response');
         jsonData = JSON.parse(jsonMatch[0]) as ExtractedData;
       }
       
-      // Extract the needed properties with proper type checking
       const title = typeof jsonData.title === 'string' ? jsonData.title : 'Untitled';
       const summary = typeof jsonData.summary === 'string' ? jsonData.summary : 'No summary available';
       const actionItems = Array.isArray(jsonData.actionItems) ? jsonData.actionItems : [];
       
-      console.log(`[DEBUG] Together API call successful for note ${args.id}`);
-      console.log(`[DEBUG] Extracted title: ${title}, summary length: ${summary.length}, actionItems count: ${actionItems.length}`);
+      console.log(`[TOGETHER_EXTRACT] API call successful for note ${noteId}`);
+      console.log(`[TOGETHER_EXTRACT] Extracted title: ${title}, summary length: ${summary.length}, actionItems count: ${actionItems.length}`);
 
-      console.log(`[DEBUG] Calling saveSummary for note ${args.id}`);
-      await ctx.runMutation(internal.together.saveSummary, {
-        id: args.id,
+      // Return the extracted data instead of calling saveSummary
+      return {
+        title,
         summary,
         actionItems,
-        title,
-      });
-      console.log(`[DEBUG] saveSummary mutation called successfully for note ${args.id}`);
-    } catch (e) {
-      console.error(`[ERROR] Error extracting from voice message for note ${args.id}:`, e);
-      console.error(`[ERROR] Detailed error: ${JSON.stringify(e, null, 2)}`);
-      
-      // Provide fallback values to prevent UI from getting stuck
-      console.log(`[DEBUG] Calling saveSummary with fallback values for note ${args.id}`);
-      await ctx.runMutation(internal.together.saveSummary, {
-        id: args.id,
-        summary: 'Summary failed to generate. Please try again or check logs.',
-        actionItems: ['Check application logs for errors'],
-        title: 'Error Processing Note',
-      });
+      };
+
+    } catch (e: any) {
+      console.error(`[TOGETHER_EXTRACT] Error extracting from voice message for note ${noteId}:`, e.message, e.stack);
+      if (e.response && e.response.data) {
+        console.error('[TOGETHER_EXTRACT] API Error details:', e.response.data);
+      }
+      // Return error structure or throw, depending on how llm.ts should handle it.
+      // For now, let's return fallback values so llm.ts can save them.
+      return {
+        title: 'Error Processing Note (Together)',
+        summary: 'Summary failed to generate via Together AI. Please check logs.',
+        actionItems: ['Check application logs for Together AI errors'],
+      };
     }
   },
 });
@@ -125,71 +130,8 @@ export const getTranscript = internalQuery({
   },
 });
 
-export const saveSummary = internalMutation({
-  args: {
-    id: v.id('notes'),
-    summary: v.string(),
-    title: v.string(),
-    actionItems: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    try {
-      const { id, summary, actionItems, title } = args;
-      console.log(`[DEBUG] saveSummary started for note ${id} with title: ${title}`);
-      
-      console.log(`[DEBUG] Updating note with summary and title, marking generatingTitle as false`);
-      await ctx.db.patch(id, {
-        summary: summary,
-        title: title,
-        generatingTitle: false,
-      });
-      console.log(`[DEBUG] Successfully updated note with summary and title`);
-
-      console.log(`[DEBUG] Retrieving note data for ${id}`);
-      let note = await ctx.db.get(id);
-
-      if (!note) {
-        console.error(`[ERROR] Couldn't find note ${id}`);
-        return;
-      }
-      console.log(`[DEBUG] Found note data: ${JSON.stringify(note, null, 2)}`);
-      
-      console.log(`[DEBUG] Creating ${actionItems.length} action items for note ${id}`);
-      for (let actionItem of actionItems) {
-        console.log(`[DEBUG] Creating action item: ${actionItem}`);
-        await ctx.db.insert('actionItems', {
-          task: actionItem,
-          noteId: id,
-          userId: note.userId,
-        });
-      }
-      console.log(`[DEBUG] Successfully created all action items for note ${id}`);
-
-      console.log(`[DEBUG] Marking generatingActionItems as false for note ${id}`);
-      await ctx.db.patch(id, {
-        generatingActionItems: false,
-      });
-      console.log(`[DEBUG] saveSummary completed successfully for note ${id}`);
-    } catch (error) {
-      console.error(`[ERROR] saveSummary failed for note ${args.id}:`, error);
-      console.error(`[ERROR] Detailed error: ${JSON.stringify(error, null, 2)}`);
-      
-      // Mark everything as complete to prevent UI from getting stuck
-      try {
-        console.log(`[DEBUG] Attempting to recover from error for note ${args.id}`);
-        await ctx.db.patch(args.id, {
-          generatingTitle: false,
-          generatingActionItems: false,
-          title: args.title || "Error Processing Note",
-          summary: args.summary || "An error occurred during processing."
-        });
-        console.log(`[DEBUG] Recovery completed for note ${args.id}`);
-      } catch (recoveryError) {
-        console.error(`[ERROR] Recovery also failed for note ${args.id}:`, recoveryError);
-      }
-    }
-  },
-});
+// The saveSummary mutation is now handled by convex/llm.ts:saveProcessedNoteDetails
+// export const saveSummary = internalMutation({ ... }); // Keeping it commented out for now, can be deleted fully later.
 
 export type SearchResult = {
   id: string;
@@ -203,7 +145,7 @@ export const similarNotes = actionWithUser({
   handler: async (ctx, args): Promise<SearchResult[]> => {
     const getEmbedding = await togetherai.embeddings.create({
       input: [args.searchQuery.replace('/n', ' ')],
-      model: 'togethercomputer/m2-bert-80M-32k-retrieval',
+      model: 'togethercomputer/m2-bert-80M-8k-retrieval', // Changed to match embed action
     });
     const embedding = getEmbedding.data[0].embedding;
 
@@ -224,21 +166,64 @@ export const similarNotes = actionWithUser({
 });
 
 export const embed = internalAction({
-  args: {
-    id: v.id('notes'),
-    transcript: v.string(),
-  },
+  args: { id: v.id('notes') }, // Only id is needed now
   handler: async (ctx, args) => {
-    const getEmbedding = await togetherai.embeddings.create({
-      input: [args.transcript.replace('/n', ' ')],
-      model: 'togethercomputer/m2-bert-80M-32k-retrieval',
-    });
-    const embedding = getEmbedding.data[0].embedding;
+    const { id } = args;
+    console.log(`[TOGETHER_EMBED] Embedding generation started for note ${id}`);
 
-    await ctx.runMutation(internal.together.saveEmbedding, {
-      id: args.id,
-      embedding,
-    });
+    const transcript = await ctx.runQuery(internal.together.getTranscript, { id });
+
+    if (!transcript) {
+      console.log(`[TOGETHER_EMBED] No transcript found for note ${id}, skipping embedding.`);
+      await ctx.runMutation(internal.together.saveEmbedding, {
+        id,
+        embedding: [], // or some indicator of failure/skip
+        error: 'Transcript not found for embedding',
+      });
+      return;
+    }
+
+    const MIN_TRANSCRIPT_LENGTH_FOR_EMBEDDING = 25;
+    if (transcript.length < MIN_TRANSCRIPT_LENGTH_FOR_EMBEDDING) {
+      console.log(`[TOGETHER_EMBED] Transcript for note ${id} is too short (length: ${transcript.length}), skipping embedding.`);
+      await ctx.runMutation(internal.together.saveEmbedding, {
+        id,
+        embedding: [],
+        error: 'Transcript too short to generate a useful embedding.',
+      });
+      return; // Exit early
+    }
+
+    console.log(`[TOGETHER_EMBED] Transcript retrieved for note ${id}, length: ${transcript.length}. Now generating embedding.`);
+    
+    try {
+      const embeddingResponse = await togetherai.embeddings.create({
+        model: 'togethercomputer/m2-bert-80M-8k-retrieval',
+        input: transcript,
+      });
+      
+      const embedding = embeddingResponse.data[0]?.embedding;
+      if (!embedding || embedding.length === 0) {
+        console.error(`[TOGETHER_EMBED] Failed to generate embedding for note ${id}. Response data was empty or invalid.`);
+        await ctx.runMutation(internal.together.saveEmbedding, {
+          id,
+          embedding: [],
+          error: 'Embedding generation returned empty or invalid data.',
+        });
+        return;
+      }
+
+      console.log(`[TOGETHER_EMBED] Embedding generated successfully for note ${id}, dimensions: ${embedding.length}`);
+      await ctx.runMutation(internal.together.saveEmbedding, { id, embedding });
+    } catch (error: any) {
+      console.error(`[TOGETHER_EMBED] Error generating embedding for note ${id}:`, error.message, error.stack);
+      // Save a state indicating error
+      await ctx.runMutation(internal.together.saveEmbedding, {
+        id,
+        embedding: [],
+        error: `Embedding generation failed: ${error.message}`,
+      });
+    }
   },
 });
 
@@ -246,11 +231,60 @@ export const saveEmbedding = internalMutation({
   args: {
     id: v.id('notes'),
     embedding: v.array(v.float64()),
+    error: v.optional(v.string()), // This line is critical and was missing/incorrectly diffed previously
   },
   handler: async (ctx, args) => {
-    const { id, embedding } = args;
-    await ctx.db.patch(id, {
-      embedding: embedding,
+    console.log(`[TOGETHER_EMBED_SAVE] Saving embedding for note ${args.id}. Error: ${args.error || 'None'}`);
+    await ctx.db.patch(args.id, {
+      embedding: args.embedding,
+      generatingEmbedding: false, // Mark as complete
     });
+    if (args.error) {
+        console.error(`[TOGETHER_EMBED_SAVE] Embedding generation for note ${args.id} had an error: ${args.error}`);
+    }
+    console.log(`[TOGETHER_EMBED_SAVE] Embedding saved and generatingEmbedding set to false for note ${args.id}`);
+  },
+});
+
+// New action to list Together AI models
+export const listTogetherModels = action({
+  args: {},
+  handler: async () => {
+    const url = 'https://api.together.xyz/v1/models';
+    const options = {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${togetherApiKey}`,
+      },
+    };
+
+    if (!togetherApiKey || togetherApiKey === 'undefined') {
+      console.error('[TOGETHER_LIST_MODELS] TOGETHER_API_KEY is not set.');
+      throw new Error('Together API key is not configured.');
+    }
+
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`[TOGETHER_LIST_MODELS] API error: ${response.status} ${response.statusText}, Body: ${errorBody}`);
+        throw new Error(`Failed to fetch Together AI models: ${response.statusText}`);
+      }
+      const models = await response.json();
+      // Filter for models that are good for chat/instruction following if possible, or return all.
+      // The API response is an array of model objects. Each object has an 'id' field.
+      // Example: { id: 'mistralai/Mixtral-8x7B-Instruct-v0.1', ... }
+      // We should return an array of { id: string, name: string } or similar for the frontend.
+      // For now, returning a simplified list, assuming 'id' is the display name too.
+      if (Array.isArray(models)) {
+        return models.map(model => ({ id: model.id, name: model.display_name || model.id, type: model.type }));
+      }
+      console.warn('[TOGETHER_LIST_MODELS] Unexpected response format:', models);
+      return [];
+    } catch (error: any) {
+      console.error('[TOGETHER_LIST_MODELS] Error fetching models:', error.message);
+      throw new Error('Error fetching Together AI models.');
+    }
   },
 });

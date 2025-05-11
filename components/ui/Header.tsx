@@ -1,6 +1,13 @@
 import Link from 'next/link';
 import { UserNav } from './UserNav';
 import { currentUser } from '@clerk/nextjs';
+import {
+  NavigationMenu,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  navigationMenuTriggerStyle, // For consistent styling with Link
+} from "@/components/ui/navigation-menu";
 
 export default async function Header() {
   const user = await currentUser();
@@ -24,24 +31,31 @@ export default async function Header() {
         <div className="flex items-center gap-4 md:gap-6">
           {user ? (
             <>
-              <Link
-                href={'/features'}
-                className="hidden cursor-pointer text-md text-gray-700 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-400 md:inline-block lg:text-lg"
-              >
-                Features
-              </Link>
-              <Link
-                href={'/dashboard'}
-                className="hidden cursor-pointer text-md text-gray-700 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-400 md:inline-block lg:text-lg"
-              >
-                Recordings
-              </Link>
-              <Link
-                href={'/dashboard/action-items'}
-                className="hidden cursor-pointer text-md text-gray-700 dark:text-gray-300 hover:text-primary-500 dark:hover:text-primary-400 md:inline-block lg:text-lg"
-              >
-                Action Items
-              </Link>
+              <NavigationMenu>
+                <NavigationMenuList>
+                  <NavigationMenuItem>
+                    <Link href="/dashboard" legacyBehavior passHref>
+                      <NavigationMenuLink className={navigationMenuTriggerStyle() + " hidden md:inline-flex lg:text-lg"}>
+                        Dashboard
+                      </NavigationMenuLink>
+                    </Link>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <Link href="/features" legacyBehavior passHref>
+                      <NavigationMenuLink className={navigationMenuTriggerStyle() + " hidden md:inline-flex lg:text-lg"}>
+                        Features
+                      </NavigationMenuLink>
+                    </Link>
+                  </NavigationMenuItem>
+                  <NavigationMenuItem>
+                    <Link href="/dashboard/action-items" legacyBehavior passHref>
+                      <NavigationMenuLink className={navigationMenuTriggerStyle() + " hidden md:inline-flex lg:text-lg"}>
+                        Action Items
+                      </NavigationMenuLink>
+                    </Link>
+                  </NavigationMenuItem>
+                </NavigationMenuList>
+              </NavigationMenu>
               <UserNav
                 image={user.imageUrl}
                 name={user.firstName + ' ' + user.lastName}

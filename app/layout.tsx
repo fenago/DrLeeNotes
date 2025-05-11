@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import ConvexClientProvider from './ConvexClientProvider';
 import Footer from '@/components/ui/Footer';
+import Header from '@/components/ui/Header';
 import { Toaster } from 'react-hot-toast';
 import PlausibleProvider from 'next-plausible';
 
@@ -47,9 +48,10 @@ export default function RootLayout({
       </head>
       <body>
         <ConvexClientProvider>
+          <Header />
           {children}
           <Footer />
-          <Toaster position="bottom-left" reverseOrder={false} />
+          <Toaster />
         </ConvexClientProvider>
       </body>
     </html>

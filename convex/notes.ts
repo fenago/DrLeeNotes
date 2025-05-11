@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import { internal } from '../convex/_generated/api';
 import { mutationWithUser, queryWithUser } from './utils';
-import { internalMutation } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 
 export const generateUploadUrl = mutationWithUser({
   args: {},
@@ -18,19 +18,38 @@ export const createNote = mutationWithUser({
     const userId = ctx.userId;
     const fileUrl = (await ctx.storage.getUrl(storageId))!;
 
+    // Get user settings to determine which transcription model to use
+    const userSettings = await ctx.runQuery(internal.notes.internalGetUserSettings, { userId });
+    const transcriptionChoice = userSettings?.transcriptionModelIdentifier || 'default_whisper';
+
+    // The note's transcriptionModel field will be set by the saveTranscript mutation
+    // based on the model that actually runs.
     const noteId = await ctx.db.insert('notes', {
       userId,
       audioFileId: storageId,
       audioFileUrl: fileUrl,
       generatingTranscript: true,
       generatingTitle: true,
+      generatingSummary: true,
       generatingActionItems: true,
+      generatingEmbedding: true,
+      // llmProvider and other llm model fields will be set when LLM processing happens
+      // transcriptionModel will be set by saveTranscript mutation
     });
 
-    await ctx.scheduler.runAfter(0, internal.whisper.chat, {
-      fileUrl,
-      id: noteId,
-    });
+    if (transcriptionChoice === 'fast_whisper') {
+      console.log(`[CREATE_NOTE] Scheduling Incredibly Fast Whisper for note ${noteId}`);
+      await ctx.scheduler.runAfter(0, internal.incredibly_fast_whisper.generateTranscriptFast, {
+        fileUrl,
+        id: noteId,
+      });
+    } else { // 'default_whisper' or any other/unset value
+      console.log(`[CREATE_NOTE] Scheduling Default Whisper for note ${noteId}`);
+      await ctx.scheduler.runAfter(0, internal.whisper.chat, {
+        fileUrl,
+        id: noteId,
+      });
+    }
 
     return noteId;
   },
@@ -100,6 +119,7 @@ export const getNotes = queryWithUser({
     const notes = await ctx.db
       .query('notes')
       .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .order('desc')
       .collect();
 
     const results = Promise.all(
@@ -172,6 +192,105 @@ export const actionItemCountForNote = queryWithUser({
     return actionItems.length;
   },
 });
+
+// --- User Settings --- 
+
+export const getUserSettings = queryWithUser({
+  args: {},
+  handler: async (ctx) => {
+    if (!ctx.userId) return null;
+    const currentUserId = ctx.userId; 
+    const settings = await ctx.db
+      .query('userSettings')
+      .withIndex('by_userId', (q) => q.eq('userId', currentUserId))
+      .unique();
+    
+    if (settings) {
+      return {
+        ...settings,
+        // Ensure a default transcription model if it's somehow not set
+        transcriptionModelIdentifier: settings.transcriptionModelIdentifier || 'default_whisper',
+      };
+    }
+    // Default settings if none exist for the user
+    return {
+      userId: currentUserId,
+      llmProvider: 'together', // Default provider
+      openaiModel: undefined, 
+      togetherModel: 'mistralai/Mixtral-8x7B-Instruct-v0.1', // Default Together model
+      geminiModel: undefined, // Default Gemini model
+      transcriptionModelIdentifier: 'default_whisper', // Default transcription model
+    };
+  },
+});
+
+export const setUserSettings = mutationWithUser({
+  args: {
+    llmProvider: v.string(), 
+    llmModel: v.optional(v.string()), // Keep for backward compatibility or specific use if any
+    openaiModel: v.optional(v.string()), 
+    togetherModel: v.optional(v.string()),
+    geminiModel: v.optional(v.string()),
+    transcriptionModelIdentifier: v.optional(v.string()), // Added
+  },
+  handler: async (ctx, { llmProvider, llmModel, openaiModel, togetherModel, geminiModel, transcriptionModelIdentifier }) => {
+    const userId = ctx.userId;
+    const existingSettings = await ctx.db
+      .query('userSettings')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique();
+
+    if (existingSettings) {
+      await ctx.db.patch(existingSettings._id, {
+        llmProvider,
+        openaiModel: openaiModel === undefined ? existingSettings.openaiModel : openaiModel,
+        togetherModel: togetherModel === undefined ? existingSettings.togetherModel : togetherModel,
+        geminiModel: geminiModel === undefined ? existingSettings.geminiModel : geminiModel,
+        transcriptionModelIdentifier: transcriptionModelIdentifier === undefined ? existingSettings.transcriptionModelIdentifier : transcriptionModelIdentifier,
+      });
+    } else {
+      await ctx.db.insert('userSettings', {
+        userId,
+        llmProvider,
+        openaiModel,
+        togetherModel,
+        geminiModel,
+        transcriptionModelIdentifier: transcriptionModelIdentifier || 'default_whisper',
+      });
+    }
+  },
+});
+
+// Internal query to get effective LLM settings for a user, used by llm.ts
+export const internalGetUserSettings = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const settings = await ctx.db
+      .query('userSettings')
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
+      .unique();
+
+    if (settings) {
+      return {
+        ...settings,
+        llmProvider: settings.llmProvider || 'together',
+        togetherModel: settings.togetherModel || 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+        transcriptionModelIdentifier: settings.transcriptionModelIdentifier || 'default_whisper',
+      };
+    }
+    // Default settings if none exist for the user or specific fields are missing
+    return {
+      userId,
+      llmProvider: 'together',
+      openaiModel: undefined,
+      togetherModel: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      geminiModel: undefined,
+      transcriptionModelIdentifier: 'default_whisper',
+    };
+  },
+});
+
+// --- End User Settings ---
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;

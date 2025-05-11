@@ -13,8 +13,9 @@ import { ExclamationTriangleIcon } from '@radix-ui/react-icons';
 const RecordVoicePage = () => {
   const [title, setTitle] = useState('Record your voice note');
   const envVarsUrl = useQuery(api.utils.envVarsMissing);
+  const llmSettings = useQuery(api.notes.getUserSettings);
 
-  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [totalSeconds, setTotalSeconds] = useState(0);
 
@@ -98,6 +99,20 @@ const RecordVoicePage = () => {
         {title}
       </h1>
       <p className="mb-20 mt-4 text-gray-400">{formattedDate}</p>
+      {/* Display Current Models Start */}
+      <div className="mb-4 text-sm text-center text-gray-500">
+        <p>Transcription Model: Whisper large-v3 (via Replicate)</p>
+        {llmSettings && (
+          <p>
+            LLM: 
+            {llmSettings.llmProvider === 'openai' && `OpenAI${llmSettings.openaiModel ? ` (${llmSettings.openaiModel})` : ''}`}
+            {llmSettings.llmProvider === 'together' && `Together AI${llmSettings.togetherModel ? ` (${llmSettings.togetherModel})` : ''}`}
+            {llmSettings.llmProvider === 'gemini' && `Gemini${llmSettings.geminiModel ? ` (${llmSettings.geminiModel})` : ''}`}
+            {!['openai', 'together', 'gemini'].includes(llmSettings.llmProvider ?? '') && (llmSettings.llmProvider ?? 'N/A')}
+          </p>
+        )}
+      </div>
+      {/* Display Current Models End */}
       <div className="relative mx-auto flex h-[316px] w-[316px] items-center justify-center">
         <div
           className={`recording-box absolute h-full w-full rounded-[50%] p-[12%] pt-[17%] ${
@@ -184,9 +199,17 @@ function MissingEnvVars(props: { url: string }) {
               <a
                 className="underline"
                 target="_blank"
-                href="https://replicate.com/account/api-tokens"
+                href="https://platform.openai.com/api-keys"
               >
-                Replicate
+                OpenAI
+              </a>
+              , and{' '}
+              <a
+                className="underline"
+                target="_blank"
+                href="https://makersuite.google.com/app/apikey"
+              >
+                Gemini
               </a>
               .
             </p>

@@ -56,6 +56,7 @@ export const chat = internalAction({
     await ctx.runMutation(internal.whisper.saveTranscript, {
       id: args.id,
       transcript,
+      transcriptionModelName: "Whisper large-v3 (Replicate)",
     });
     } catch (error) {
       // Detailed error logging
@@ -66,6 +67,7 @@ export const chat = internalAction({
       await ctx.runMutation(internal.whisper.saveTranscript, {
         id: args.id,
         transcript: "Error transcribing audio. Please check the logs for details.",
+        transcriptionModelName: "Error",
       });
     }
   },
@@ -75,55 +77,47 @@ export const saveTranscript = internalMutation({
   args: {
     id: v.id('notes'),
     transcript: v.string(),
+    transcriptionModelName: v.string(),
   },
   handler: async (ctx, args) => {
-    try {
-      const { id, transcript } = args;
-      console.log(`[DEBUG] saveTranscript started for note ${id}`);
+    console.log(`[WHISPER_SAVE] saveTranscript started for note ${args.id} with model ${args.transcriptionModelName}`);
+    await ctx.db.patch(args.id, {
+      transcription: args.transcript,
+      generatingTranscript: false,
+      generatingTitle: true, // Set to true, will be set to false by LLM processing
+      generatingActionItems: true, // Set to true, will be set to false by LLM processing
+      generatingEmbedding: true, // Set to true, will be set to false by embedding process
+      transcriptionModel: args.transcriptionModelName,
+    });
+    console.log(`[WHISPER_SAVE] Patched note ${args.id} with transcript and set generating flags using model ${args.transcriptionModelName}.`);
 
-      await ctx.db.patch(id, {
-        transcription: transcript,
-        generatingTranscript: false,
-      });
-      console.log(`[DEBUG] Updated note ${id} with transcript and marked generatingTranscript as false`);
+    // Fetch the note to get the userId
+    const note = await ctx.db.get(args.id);
+    if (!note) {
+      console.error(`[WHISPER_SAVE] Note ${args.id} not found after patching transcript.`);
+      // Optionally, throw an error or handle this case if critical
+      return; 
+    }
 
-      const note = (await ctx.db.get(id))!;
-      console.log(`[DEBUG] Retrieved note data: ${JSON.stringify(note, null, 2)}`);
-      
-      if (note.audioFileId) {
-        await ctx.storage.delete(note.audioFileId);
-        console.log(`[DEBUG] Deleted audio file ${note.audioFileId}`);
-      } else {
-        console.log(`[WARNING] No audioFileId found for note ${id}`);
-      }
-
-      // Schedule LLM processing
-      console.log(`[DEBUG] Scheduling Together.ai chat processing for note ${id}`);
-      await ctx.scheduler.runAfter(0, internal.together.chat, {
-        id: args.id,
-        transcript,
-      });
-
-      console.log(`[DEBUG] Scheduling Together.ai embedding for note ${id}`);
-      await ctx.scheduler.runAfter(0, internal.together.embed, {
-        id: args.id,
-        transcript: transcript,
-      });
-      
-      console.log(`[DEBUG] saveTranscript completed successfully for note ${id}`);
-    } catch (error) {
-      console.error(`[ERROR] saveTranscript failed for note ${args.id}:`, error);
-      console.error(`Error details: ${JSON.stringify(error, null, 2)}`);
-      
-      // Mark everything as complete to prevent UI from getting stuck
+    if (!note.userId) {
+      console.error(`[WHISPER_SAVE] userId not found on note ${args.id}. Cannot schedule LLM processing.`);
+      // Fallback: mark as not generating to prevent UI hang, though this indicates a data integrity issue.
       await ctx.db.patch(args.id, {
-        generatingTranscript: false,
         generatingTitle: false,
         generatingActionItems: false,
-        transcription: args.transcript,
-        title: "Error processing note",
-        summary: "An error occurred during processing. Please try again."
       });
+      return;
     }
+
+    console.log(`[WHISPER_SAVE] Scheduling LLM processing for note ${args.id}, user ${note.userId}`);
+    await ctx.scheduler.runAfter(0, internal.llm.processNoteWithLLM, {
+      noteId: args.id, // Pass noteId explicitly
+      transcript: args.transcript,
+      userId: note.userId,
+    });
+
+    console.log(`[WHISPER_SAVE] Scheduling embedding generation for note ${args.id}`);
+    await ctx.scheduler.runAfter(0, internal.together.embed, { id: args.id });
+    console.log(`[WHISPER_SAVE] saveTranscript completed for note ${args.id}`);
   },
 });

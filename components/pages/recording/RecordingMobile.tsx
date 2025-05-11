@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useState } from 'react';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import toast, { Toaster } from 'react-hot-toast';
 import { Doc } from '@/convex/_generated/dataModel';
@@ -17,6 +17,8 @@ export default function RecordingMobile({
   const [summaryOpen, setSummaryOpen] = useState<boolean>(false);
   const [actionItemOpen, setActionItemOpen] = useState<boolean>(false);
 
+  const llmSettings = useQuery(api.notes.getUserSettings);
+
   const mutateActionItems = useMutation(api.notes.removeActionItem);
 
   function removeActionItem(actionId: any) {
@@ -30,6 +32,23 @@ export default function RecordingMobile({
         <h1 className="leading text-center text-xl font-medium leading-[114.3%] tracking-[-0.75px] text-dark md:text-[35px] lg:text-[43px]">
           {title ?? 'Untitled Note'}
         </h1>
+      </div>
+      <div className="text-center text-xs opacity-70 mb-3">
+        <p>Transcription: Whisper (via Replicate)</p>
+        {!llmSettings ? (
+          <p>LLM: Loading settings...</p>
+        ) : (
+          <p>
+            LLM:{' '}
+            {llmSettings.llmProvider === 'openai'
+              ? `OpenAI (${llmSettings.openaiModel || 'gpt-4o'})`
+              : llmSettings.llmProvider === 'together'
+              ? `Together AI (${llmSettings.togetherModel || 'mistralai/Mixtral-8x7B-Instruct-v0.1'})`
+              : llmSettings.llmProvider === 'gemini'
+              ? `Gemini (${llmSettings.geminiModel || 'models/gemini-pro'})`
+              : 'Together AI'}{/* Default or fallback provider display */}
+          </p>
+        )}
       </div>
       <div className="grid w-full grid-cols-3 ">
         <button
